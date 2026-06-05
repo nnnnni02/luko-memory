@@ -16,7 +16,6 @@ const pool = new Pool({
   family: 4
 });
 
-
 const app = express();
 app.use(cors());
 app.use(express.json());
