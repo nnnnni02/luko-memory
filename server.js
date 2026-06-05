@@ -15,46 +15,43 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-await pool.query(`
-  CREATE TABLE IF NOT EXISTS memories (
-    id SERIAL PRIMARY KEY,
-    content TEXT NOT NULL,
-    category TEXT NOT NULL DEFAULT 'daily',
-    tags TEXT DEFAULT '',
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
-  );
-`);
-
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.static(__dirname));
 
 app.get('/api/memories', async (req, res) => {
-  const { category = 'all', limit = 50 } = req.query;
-  const q = category === 'all'
-    ? await pool.query('SELECT * FROM memories ORDER BY updated_at DESC LIMIT $1', [Number(limit)])
-    : await pool.query('SELECT * FROM memories WHERE category = $1 ORDER BY updated_at DESC LIMIT $2', [category, Number(limit)]);
-  res.json(q.rows);
+  try {
+    const { category = 'all', limit = 50 } = req.query;
+    const q = category === 'all'
+      ? await pool.query('SELECT * FROM memories ORDER BY updated_at DESC LIMIT $1', [Number(limit)])
+      : await pool.query('SELECT * FROM memories WHERE category = $1 ORDER BY updated_at DESC LIMIT $2', [category, Number(limit)]);
+    res.json(q.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/memories', async (req, res) => {
-  const { content, category = 'daily', tags = '' } = req.body;
-  if (!content) return res.status(400).json({ error: 'content required' });
-  const q = await pool.query('INSERT INTO memories (content, category, tags) VALUES ($1, $2, $3) RETURNING id', [content, category, tags]);
-  res.json({ id: q.rows[0].id });
+  try {
+    const { content, category = 'daily', tags = '' } = req.body;
+    if (!content) return res.status(400).json({ error: 'content required' });
+    const q = await pool.query('INSERT INTO memories (content, category, tags) VALUES ($1, $2, $3) RETURNING id', [content, category, tags]);
+    res.json({ id: q.rows[0].id });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.delete('/api/memories/:id', async (req, res) => {
-  await pool.query('DELETE FROM memories WHERE id = $1', [Number(req.params.id)]);
-  res.json({ deleted: true });
+  try {
+    await pool.query('DELETE FROM memories WHERE id = $1', [Number(req.params.id)]);
+    res.json({ deleted: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.put('/api/memories/:id', async (req, res) => {
-  const { content } = req.body;
-  await pool.query('UPDATE memories SET content = $1, updated_at = NOW() WHERE id = $2', [content, Number(req.params.id)]);
-  res.json({ updated: true });
+  try {
+    const { content } = req.body;
+    await pool.query('UPDATE memories SET content = $1, updated_at = NOW() WHERE id = $2', [content, Number(req.params.id)]);
+    res.json({ updated: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 const mcpServer = new McpServer({ name: 'luko-memory', version: '1.0.0' });
@@ -126,4 +123,21 @@ app.post('/messages', async (req, res) => {
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'dashboard.html')));
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`luko-memory running on port ${PORT}`));
+app.listen(PORT, async () => {
+  console.log(`luko-memory running on port ${PORT}`);
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS memories (
+        id SERIAL PRIMARY KEY,
+        content TEXT NOT NULL,
+        category TEXT NOT NULL DEFAULT 'daily',
+        tags TEXT DEFAULT '',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    console.log('Database ready');
+  } catch (e) {
+    console.error('DB init error:', e.message);
+  }
+});
