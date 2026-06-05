@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>路可的記憶庫</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0f0f0f; color: #e0e0e0; font-family: sans-serif; padding: 16px; }
+  h1 { text-align: center; color: #c9a96e; margin-bottom: 20px; font-size: 1.3rem; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .tab { padding: 6px 14px; border-radius: 20px; border: 1px solid #333; background: #1a1a1a; color: #aaa; cursor: pointer; font-size: 0.85rem; }
+  .tab.active { background: #c9a96e; color: #000; border-color: #c9a96e; }
+  .write-box { background: #1a1a1a; border-radius: 12px; padding: 14px; margin-bottom: 16px; }
+  textarea { width: 100%; background: #0f0f0f; border: 1px solid #333; color: #e0e0e0; border-radius: 8px; padding: 10px; font-size: 0.9rem; resize: vertical; min-height: 80px; }
+  .write-row { display: flex; gap: 8px; margin-top: 8px; align-items: center; flex-wrap: wrap; }
+  select { background: #0f0f0f; border: 1px solid #333; color: #e0e0e0; border-radius: 6px; padding: 6px 10px; font-size: 0.85rem; }
+  input[type=text] { background: #0f0f0f; border: 1px solid #333; color: #e0e0e0; border-radius: 6px; padding: 6px 10px; font-size: 0.85rem; flex: 1; }
+  button.primary { background: #c9a96e; color: #000; border: none; border-radius: 6px; padding: 6px 16px; cursor: pointer; font-size: 0.85rem; }
+  button.danger { background: transparent; color: #888; border: 1px solid #333; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 0.8rem; }
+  .memory-list { display: flex; flex-direction: column; gap: 10px; }
+  .memory-card { background: #1a1a1a; border-radius: 10px; padding: 12px; }
+  .memory-meta { font-size: 0.75rem; color: #666; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+  .category-badge { padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; }
+  .core { background: #3a2a1a; color: #c9a96e; }
+  .daily { background: #1a2a3a; color: #6ab0e0; }
+  .diary { background: #1a3a2a; color: #6ae0a0; }
+  .memory-content { font-size: 0.9rem; line-height: 1.5; white-space: pre-wrap; }
+  .memory-tags { font-size: 0.75rem; color: #666; margin-top: 6px; }
+  .empty { text-align: center; color: #444; padding: 40px; }
+  .stats { text-align: center; color: #666; font-size: 0.8rem; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<h1>🌙 路可的記憶庫</h1>
+<div class="write-box">
+  <textarea id="content" placeholder="寫一條記憶..."></textarea>
+  <div class="write-row">
+    <select id="category">
+      <option value="core">核心</option>
+      <option value="daily" selected>日常</option>
+      <option value="diary">日記</option>
+    </select>
+    <input type="text" id="tags" placeholder="標籤（逗號分隔）">
+    <button class="primary" onclick="writeMemory()">寫入</button>
+  </div>
+</div>
+<div class="tabs">
+  <div class="tab active" onclick="setTab('all', this)">全部</div>
+  <div class="tab" onclick="setTab('core', this)">核心</div>
+  <div class="tab" onclick="setTab('daily', this)">日常</div>
+  <div class="tab" onclick="setTab('diary', this)">日記</div>
+</div>
+<div class="stats" id="stats"></div>
+<div class="memory-list" id="list"></div>
+<script>
+let currentCategory = 'all';
+function setTab(cat, el) {
+  currentCategory = cat;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  loadMemories();
+}
+async function loadMemories() {
+  const res = await fetch('/api/memories?category=' + currentCategory + '&limit=100');
+  const data = await res.json();
+  document.getElementById('stats').textContent = '共 ' + data.length + ' 條';
+  if (data.length === 0) { document.getElementById('list').innerHTML = '<div class="empty">沒有記憶</div>'; return; }
+  document.getElementById('list').innerHTML = data.map(m => '<div class="memory-card" id="card-' + m.id + '"><div class="memory-meta"><span><span class="category-badge ' + m.category + '">' + m.category + '</span> #' + m.id + ' · ' + m.created_at + '</span><button class="danger" onclick="deleteMemory(' + m.id + ')">刪除</button></div><div class="memory-content">' + escapeHtml(m.content) + '</div>' + (m.tags ? '<div class="memory-tags">🏷 ' + m.tags + '</div>' : '') + '</div>').join('');
+}
+async function writeMemory() {
+  const content = document.getElementById('content').value.trim();
+  if (!content) return;
+  await fetch('/api/memories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content, category: document.getElementById('category').value, tags: document.getElementById('tags').value.trim() }) });
+  document.getElementById('content').value = '';
+  document.getElementById('tags').value = '';
+  loadMemories();
+}
+async function deleteMemory(id) {
+  if (!confirm('刪除這條記憶？')) return;
+  await fetch('/api/memories/' + id, { method: 'DELETE' });
+  document.getElementById('card-' + id).remove();
+}
+function escapeHtml(str) { return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+loadMemories();
+</script>
+</body>
+</html>
