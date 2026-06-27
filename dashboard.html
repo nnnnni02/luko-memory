@@ -8,8 +8,8 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: #0f0f0f; color: #e0e0e0; font-family: sans-serif; padding: 16px; }
   h1 { text-align: center; color: #c9a96e; margin-bottom: 20px; font-size: 1.3rem; }
-  .tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
-  .tab { padding: 6px 14px; border-radius: 20px; border: 1px solid #333; background: #1a1a1a; color: #aaa; cursor: pointer; font-size: 0.85rem; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+  .tab { padding: 6px 12px; border-radius: 20px; border: 1px solid #333; background: #1a1a1a; color: #aaa; cursor: pointer; font-size: 0.8rem; }
   .tab.active { background: #c9a96e; color: #000; border-color: #c9a96e; }
   .write-box { background: #1a1a1a; border-radius: 12px; padding: 14px; margin-bottom: 16px; }
   textarea { width: 100%; background: #0f0f0f; border: 1px solid #333; color: #e0e0e0; border-radius: 8px; padding: 10px; font-size: 0.9rem; resize: vertical; min-height: 80px; }
@@ -17,18 +17,29 @@
   select { background: #0f0f0f; border: 1px solid #333; color: #e0e0e0; border-radius: 6px; padding: 6px 10px; font-size: 0.85rem; }
   input[type=text] { background: #0f0f0f; border: 1px solid #333; color: #e0e0e0; border-radius: 6px; padding: 6px 10px; font-size: 0.85rem; flex: 1; }
   button.primary { background: #c9a96e; color: #000; border: none; border-radius: 6px; padding: 6px 16px; cursor: pointer; font-size: 0.85rem; }
-  button.danger { background: transparent; color: #888; border: 1px solid #333; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 0.8rem; }
+  button.small { background: transparent; color: #888; border: 1px solid #333; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 0.8rem; }
+  button.small:hover { color: #e0e0e0; border-color: #666; }
+  button.save { background: #6ae0a0; color: #000; border: none; border-radius: 6px; padding: 4px 12px; cursor: pointer; font-size: 0.8rem; }
+  button.cancel { background: transparent; color: #888; border: 1px solid #333; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 0.8rem; }
   .memory-list { display: flex; flex-direction: column; gap: 10px; }
   .memory-card { background: #1a1a1a; border-radius: 10px; padding: 12px; }
   .memory-meta { font-size: 0.75rem; color: #666; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+  .meta-left { display: flex; align-items: center; gap: 6px; }
+  .meta-right { display: flex; gap: 6px; }
   .category-badge { padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; }
   .core { background: #3a2a1a; color: #c9a96e; }
   .daily { background: #1a2a3a; color: #6ab0e0; }
   .diary { background: #1a3a2a; color: #6ae0a0; }
+  .todo { background: #3a1a2a; color: #e06a8a; }
+  .plan { background: #2a1a3a; color: #a06ae0; }
+  .note { background: #1a3a3a; color: #6ae0d0; }
   .memory-content { font-size: 0.9rem; line-height: 1.5; white-space: pre-wrap; }
   .memory-tags { font-size: 0.75rem; color: #666; margin-top: 6px; }
   .empty { text-align: center; color: #444; padding: 40px; }
   .stats { text-align: center; color: #666; font-size: 0.8rem; margin-bottom: 12px; }
+  .edit-area { margin-top: 8px; }
+  .edit-area textarea { min-height: 60px; }
+  .edit-row { display: flex; gap: 6px; margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -40,6 +51,9 @@
       <option value="core">核心</option>
       <option value="daily" selected>日常</option>
       <option value="diary">日記</option>
+      <option value="todo">待辦</option>
+      <option value="plan">計劃</option>
+      <option value="note">筆記</option>
     </select>
     <input type="text" id="tags" placeholder="標籤（逗號分隔）">
     <button class="primary" onclick="writeMemory()">寫入</button>
@@ -50,38 +64,104 @@
   <div class="tab" onclick="setTab('core', this)">核心</div>
   <div class="tab" onclick="setTab('daily', this)">日常</div>
   <div class="tab" onclick="setTab('diary', this)">日記</div>
+  <div class="tab" onclick="setTab('todo', this)">待辦</div>
+  <div class="tab" onclick="setTab('plan', this)">計劃</div>
+  <div class="tab" onclick="setTab('note', this)">筆記</div>
 </div>
 <div class="stats" id="stats"></div>
 <div class="memory-list" id="list"></div>
 <script>
+const catNames = { core:'核心', daily:'日常', diary:'日記', todo:'待辦', plan:'計劃', note:'筆記' };
 let currentCategory = 'all';
+
 function setTab(cat, el) {
   currentCategory = cat;
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
   loadMemories();
 }
+
 async function loadMemories() {
   const res = await fetch('/api/memories?category=' + currentCategory + '&limit=100');
   const data = await res.json();
   document.getElementById('stats').textContent = '共 ' + data.length + ' 條';
-  if (data.length === 0) { document.getElementById('list').innerHTML = '<div class="empty">沒有記憶</div>'; return; }
-  document.getElementById('list').innerHTML = data.map(m => '<div class="memory-card" id="card-' + m.id + '"><div class="memory-meta"><span><span class="category-badge ' + m.category + '">' + m.category + '</span> #' + m.id + ' · ' + m.created_at + '</span><button class="danger" onclick="deleteMemory(' + m.id + ')">刪除</button></div><div class="memory-content">' + escapeHtml(m.content) + '</div>' + (m.tags ? '<div class="memory-tags">🏷 ' + m.tags + '</div>' : '') + '</div>').join('');
+  if (data.length === 0) {
+    document.getElementById('list').innerHTML = '<div class="empty">沒有記憶</div>';
+    return;
+  }
+  document.getElementById('list').innerHTML = data.map(m => {
+    const d = new Date(m.created_at).toLocaleString('zh-TW');
+    return '<div class="memory-card" id="card-' + m.id + '">' +
+      '<div class="memory-meta">' +
+        '<span class="meta-left"><span class="category-badge ' + m.category + '">' + (catNames[m.category] || m.category) + '</span> #' + m.id + ' · ' + d + '</span>' +
+        '<span class="meta-right">' +
+          '<button class="small" onclick="startEdit(' + m.id + ')">編輯</button>' +
+          '<button class="small" onclick="deleteMemory(' + m.id + ')">刪除</button>' +
+        '</span>' +
+      '</div>' +
+      '<div class="memory-content" id="content-' + m.id + '">' + escapeHtml(m.content) + '</div>' +
+      (m.tags ? '<div class="memory-tags">🏷 ' + m.tags + '</div>' : '') +
+    '</div>';
+  }).join('');
 }
+
 async function writeMemory() {
   const content = document.getElementById('content').value.trim();
   if (!content) return;
-  await fetch('/api/memories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content, category: document.getElementById('category').value, tags: document.getElementById('tags').value.trim() }) });
+  await fetch('/api/memories', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      content,
+      category: document.getElementById('category').value,
+      tags: document.getElementById('tags').value.trim()
+    })
+  });
   document.getElementById('content').value = '';
   document.getElementById('tags').value = '';
   loadMemories();
 }
+
+function startEdit(id) {
+  const el = document.getElementById('content-' + id);
+  const oldText = el.textContent;
+  el.innerHTML = '<div class="edit-area">' +
+    '<textarea id="edit-text-' + id + '">' + escapeHtml(oldText) + '</textarea>' +
+    '<div class="edit-row">' +
+      '<button class="save" onclick="saveEdit(' + id + ')">儲存</button>' +
+      '<button class="cancel" onclick="cancelEdit(' + id + ', `' + escapeForJs(oldText) + '`)">取消</button>' +
+    '</div></div>';
+}
+
+async function saveEdit(id) {
+  const text = document.getElementById('edit-text-' + id).value.trim();
+  if (!text) return;
+  await fetch('/api/memories/' + id, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content: text })
+  });
+  loadMemories();
+}
+
+function cancelEdit(id, oldText) {
+  loadMemories();
+}
+
 async function deleteMemory(id) {
   if (!confirm('刪除這條記憶？')) return;
   await fetch('/api/memories/' + id, { method: 'DELETE' });
   document.getElementById('card-' + id).remove();
 }
-function escapeHtml(str) { return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function escapeHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function escapeForJs(str) {
+  return str.replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$/g,'\\$');
+}
+
 loadMemories();
 </script>
 </body>
