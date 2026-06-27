@@ -52,8 +52,16 @@ app.delete('/api/memories/:id', async (req, res) => {
 
 app.put('/api/memories/:id', async (req, res) => {
   try {
-    const { content } = req.body;
-    await pool.query('UPDATE memories SET content = $1, updated_at = NOW() WHERE id = $2', [content, Number(req.params.id)]);
+    const { content, category } = req.body;
+    const updates = [];
+    const values = [];
+    let idx = 1;
+    if (content) { updates.push(`content = $${idx}`); values.push(content); idx++; }
+    if (category) { updates.push(`category = $${idx}`); values.push(category); idx++; }
+    if (updates.length === 0) return res.status(400).json({ error: 'nothing to update' });
+    updates.push(`updated_at = NOW()`);
+    values.push(Number(req.params.id));
+    await pool.query(`UPDATE memories SET ${updates.join(', ')} WHERE id = $${idx}`, values);
     res.json({ updated: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -62,7 +70,7 @@ const mcpServer = new McpServer({ name: 'luko-memory', version: '1.0.0' });
 
 mcpServer.tool('write_memory', '寫入一條記憶', {
   content: z.string(),
-  category: z.enum(['core', 'daily', 'diary']).default('daily'),
+  category: z.enum(['core', 'daily', 'diary', 'todo', 'plan', 'note']).default('daily'),
   tags: z.string().default(''),
 }, async ({ content, category, tags }) => {
   const q = await pool.query('INSERT INTO memories (content, category, tags) VALUES ($1, $2, $3) RETURNING id', [content, category, tags]);
@@ -70,7 +78,7 @@ mcpServer.tool('write_memory', '寫入一條記憶', {
 });
 
 mcpServer.tool('read_memories', '讀取記憶', {
-  category: z.enum(['core', 'daily', 'diary', 'all']).default('all'),
+  category: z.enum(['core', 'daily', 'diary', 'todo', 'plan', 'note', 'all']).default('all'),
   limit: z.number().default(20),
 }, async ({ category, limit }) => {
   const q = category === 'all'
@@ -91,9 +99,18 @@ mcpServer.tool('search_memory', '搜尋記憶', {
 
 mcpServer.tool('update_memory', '更新一條記憶', {
   id: z.number(),
-  content: z.string(),
-}, async ({ id, content }) => {
-  await pool.query('UPDATE memories SET content = $1, updated_at = NOW() WHERE id = $2', [content, id]);
+  content: z.string().optional(),
+  category: z.enum(['core', 'daily', 'diary', 'todo', 'plan', 'note']).optional(),
+}, async ({ id, content, category }) => {
+  const updates = [];
+  const values = [];
+  let idx = 1;
+  if (content) { updates.push(`content = $${idx}`); values.push(content); idx++; }
+  if (category) { updates.push(`category = $${idx}`); values.push(category); idx++; }
+  if (updates.length === 0) return { content: [{ type: 'text', text: '沒有要更新的內容' }] };
+  updates.push(`updated_at = NOW()`);
+  values.push(id);
+  await pool.query(`UPDATE memories SET ${updates.join(', ')} WHERE id = $${idx}`, values);
   return { content: [{ type: 'text', text: `已更新 #${id}` }] };
 });
 
